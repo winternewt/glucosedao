@@ -19,11 +19,11 @@ import optuna
 import darts
 from torch.utils.tensorboard import SummaryWriter
 sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
-from glucose.gluformer.utils.training import ExpLikeliLoss, \
+from gluformer.utils.training import ExpLikeliLoss, \
                                          EarlyStop, \
                                          modify_collate, \
                                          adjust_learning_rate
-from glucose.utils.darts_dataset import SamplingDatasetDual
+from utils.darts_dataset import SamplingDatasetDual
 ############################################
 
 class Gluformer(nn.Module):
