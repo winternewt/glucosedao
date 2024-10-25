@@ -1,0 +1,12 @@
+gradio
+seaborn
+torch
+optuna
+numpy==1.26.4
+tensorboard
+pandas
+psutil
+typer
+darts==0.29.0
+pmdarima==2.0.4
+peft
