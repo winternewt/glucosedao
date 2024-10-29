@@ -3,25 +3,16 @@ import os
 import pickle
 import gzip
 from pathlib import Path
-
-import seaborn as sns
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
-from matplotlib.figure import Figure
 import torch
 from scipy import stats
-
 from gluformer.model import Gluformer
 from utils.darts_processing import *
 from utils.darts_dataset import *
-
-
 import hashlib
 from urllib.parse import urlparse
-
-import numpy as np
-import typer
+from huggingface_hub import hf_hub_download
+import plotly.graph_objects as go
 
 
 glucose = Path(os.path.abspath(__file__)).parent.resolve()
@@ -29,7 +20,7 @@ file_directory = glucose / "files"
 
 
 def plot_forecast(forecasts: np.ndarray, scalers: Any, dataset_test_glufo: Any, filename: str):
-    filename=filename
+    
     forecasts = (forecasts - scalers['target'].min_) / scalers['target'].scale_
 
     trues = [dataset_test_glufo.evalsample(i) for i in range(len(dataset_test_glufo))]
@@ -41,25 +32,18 @@ def plot_forecast(forecasts: np.ndarray, scalers: Any, dataset_test_glufo: Any, 
     inputs = [dataset_test_glufo[i][0] for i in range(len(dataset_test_glufo))]
     inputs = (np.array(inputs) - scalers['target'].min_) / scalers['target'].scale_
 
-    # Plot settings
-    colors = ['#00264c', '#0a2c62', '#14437f', '#1f5a9d', '#2973bb', '#358ad9', '#4d9af4', '#7bb7ff', '#add5ff', '#e6f3ff']
-    cmap = mcolors.LinearSegmentedColormap.from_list('my_colormap', colors)
-    sns.set_theme(style="whitegrid")
-
-    # Generate the plot
-    fig, ax = plt.subplots(figsize=(10, 6))
-
-
     # Select a specific sample to plot
-    ind = 30  # Example index
+    ind = 10  # Example index
 
     samples = np.random.normal(
         loc=forecasts[ind, :],  # Mean (center) of the distribution
         scale=0.1,  # Standard deviation (spread) of the distribution
         size=(forecasts.shape[1], forecasts.shape[2])
     )
-    #samples = samples.reshape(samples.shape[0], samples.shape[1], -1)
-    #print ("samples",samples.shape)
+    
+
+    # Create figure
+    fig = go.Figure()
 
     # Plot predictive distribution
     for point in range(samples.shape[0]):
@@ -67,38 +51,64 @@ def plot_forecast(forecasts: np.ndarray, scalers: Any, dataset_test_glufo: Any, 
         maxi, mini = 1.2 * np.max(samples[point, :]), 0.8 * np.min(samples[point, :])
         y_grid = np.linspace(mini, maxi, 200)
         x = kde(y_grid)
-        ax.fill_betweenx(y_grid, x1=point, x2=point - x * 15,
-                         alpha=0.7,
-                         edgecolor='black',
-                         color=cmap(point / samples.shape[0]))
+
+        # Create gradient color
+        color = f'rgba(53, 138, 217, {(point + 1) / samples.shape[0]})'
+        
+        # Add filled area
+        fig.add_trace(go.Scatter(
+            x=np.concatenate([np.full_like(y_grid, point), np.full_like(y_grid, point - x * 15)[::-1]]),
+            y=np.concatenate([y_grid, y_grid[::-1]]),
+            fill='tonexty',
+            fillcolor=color,
+            line=dict(color='rgba(0,0,0,0)'),
+            showlegend=False
+        ))
+
+    
+    true_values = np.concatenate([inputs[ind, -12:], trues[ind, :]])
+    true_values_flat=true_values.flatten()
+    
+    fig.add_trace(go.Scatter(
+        x=list(range(-12, 12)),
+        y=true_values_flat.tolist(),  # Convert to list explicitly
+        mode='lines+markers',
+        line=dict(color='blue', width=2),
+        marker=dict(size=6),
+        name='True Values'
+    ))
 
     # Plot median
     forecast = samples[:, :]
     median = np.quantile(forecast, 0.5, axis=-1)
-    ax.plot(np.arange(12), median, color='red', marker='o')
 
-    # Plot true values
-    ax.plot(np.arange(-12, 12), np.concatenate([inputs[ind, -12:], trues[ind, :]]), color='blue')
+    fig.add_trace(go.Scatter(
+        x=list(range(12)),
+        y=median.tolist(),  # Convert to list explicitly
+        mode='lines+markers',
+        line=dict(color='red', width=2),
+        marker=dict(size=8),
+        name='Median Forecast'
+    ))
 
-    # Add labels and title
-    ax.set_xlabel('Time (in 5 minute intervals)')
-    ax.set_ylabel('Glucose (mg/dL)')
-    ax.set_title(f'Gluformer Prediction with Gradient for dateset')
 
-    # Adjust font sizes
-    ax.xaxis.label.set_fontsize(16)
-    ax.yaxis.label.set_fontsize(16)
-    ax.title.set_fontsize(18)
-    for item in ax.get_xticklabels() + ax.get_yticklabels():
-        item.set_fontsize(14)
+    # Update layout
+    fig.update_layout(
+        title='Gluformer Prediction with Gradient for dataset',
+        xaxis_title='Time (in 5 minute intervals)',
+        yaxis_title='Glucose (mg/dL)',
+        font=dict(size=14),
+        showlegend=True,
+        width=1000,
+        height=600
+    ) 
 
     # Save figure
-    plt.tight_layout()
-    where = file_directory /filename
-    plt.savefig(str(where), dpi=300, bbox_inches='tight')
+    where = file_directory / filename
+    fig.write_html(str(where.with_suffix('.html')))
+    fig.write_image(str(where))
 
-    return where,ax
-
+    return where, fig
 
 
 def generate_filename_from_url(url: str, extension: str = "png") -> str:
@@ -120,18 +130,21 @@ def generate_filename_from_url(url: str, extension: str = "png") -> str:
 
 
 
-def predict_glucose_tool(url: str= 'https://huggingface.co/datasets/Livia-Zaharia/glucose_processed/blob/main/livia_mini.csv',
-                        model: str = 'https://huggingface.co/Livia-Zaharia/gluformer_models/blob/main/gluformer_1samples_10000epochs_10heads_32batch_geluactivation_livia_mini_weights.pth'
-                    ) -> Figure:
+def predict_glucose_tool(file) -> go.Figure:
     """
     Function to predict future glucose of user. It receives URL with users csv. It will run an ML and will return URL with predictions that user can open on her own..
-    :param url: of the csv file with glucose values
-    :param model: model that is used to predict the glucose
+    :param file: it is the csv file imported as a string path to the temporary location gradio allows
+    :param model: model that is used to predict the glucose- was hardcoded
     :param explain if it should give both url and explanation
     :param if the person is diabetic when doing prediction and explanation
     :return:
     """
 
+    url = file
+    model="Livia-Zaharia/gluformer_models"
+    model_path = hf_hub_download(repo_id= model, filename="gluformer_1samples_10000epochs_10heads_32batch_geluactivation_livia_mini_weights.pth")
+    
+                    
     formatter, series, scalers = load_data(url=str(url), config_path=file_directory / "config.yaml", use_covs=True,
                                            cov_type='dual',
                                            use_static_covs=True)
@@ -141,7 +154,7 @@ def predict_glucose_tool(url: str= 'https://huggingface.co/datasets/Livia-Zahari
     formatter.params['gluformer'] = {
         'in_len': 96,  # example input length, adjust as necessary
         'd_model': 512,  # model dimension
-        'n_heads': 10,  # number of attention heads##############################################################################
+        'n_heads': 10,  # number of attention heads########################
         'd_fcn': 1024,  # fully connected layer dimension
         'num_enc_layers': 2,  # number of encoder layers
         'num_dec_layers': 2,  # number of decoder layers
@@ -166,11 +179,9 @@ def predict_glucose_tool(url: str= 'https://huggingface.co/datasets/Livia-Zahari
         num_dynamic_features=num_dynamic_features,
         num_static_features=num_static_features
     )
-    weights = gr.Interface.load(model)
-    assert f"weights for {model} should exist", weights.exists()
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    glufo.load_state_dict(torch.load(str(weights), map_location=torch.device(device), weights_only=False))
+    glufo.load_state_dict(torch.load(str(model_path), map_location=torch.device(device), weights_only=True))
 
     # Define dataset for inference
     dataset_test_glufo = SamplingDatasetInferenceDual(
@@ -184,9 +195,9 @@ def predict_glucose_tool(url: str= 'https://huggingface.co/datasets/Livia-Zahari
 
     forecasts, _ = glufo.predict(
         dataset_test_glufo,
-        batch_size=16,####################################################
+        batch_size=16,#######
         num_samples=10,
-        device='cpu'
+        device=device
     )
     figure_path, result = plot_forecast(forecasts, scalers, dataset_test_glufo,filename)
     

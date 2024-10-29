@@ -7,6 +7,7 @@ import sklearn.preprocessing
 import data_formatter.types as types
 import data_formatter.utils as utils
 
+
 DataTypes = types.DataTypes
 InputTypes = types.InputTypes
 
@@ -44,6 +45,7 @@ class DataFormatter:
     print('Loading data...')
     self.params['index_col'] = False if self.params['index_col'] == -1 else self.params['index_col']
     # read data table
+  
     self.data = pd.read_csv(self.params['data_csv_path'], index_col=self.params['index_col'])
 
     # drop columns / rows

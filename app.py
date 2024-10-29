@@ -2,7 +2,7 @@ import gradio as gr
 from tools import *
 
 
-def gradio_output():
-    return (predict_glucose_tool())
+def gradio_output(file):
+    return (predict_glucose_tool(file))
 
-gr.Interface(fn=gradio_output,inputs=None,outputs="image").launch()
+gr.Interface(fn=gradio_output,inputs=gr.File(label="Upload CSV File"),outputs="plot").launch()

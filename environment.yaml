@@ -1,11 +1,10 @@
-name: glucose_genie
+name: glucose_hf
 channels:
   - conda-forge
   - defaults
 dependencies:
   - python=3.11
   - gradio
-  - seaborn
   - pytorch
   - optuna
   - tensorboard
@@ -17,3 +16,10 @@ dependencies:
     - pmdarima==2.0.4
     - numpy==1.26.4
     - peft
+    - transformers
+    - datasets
+    - python-multipart
+    - plotly
+    - kaleido
+  
+  

@@ -165,7 +165,6 @@ def load_data(url: str,
     config["data_csv_path"] = url
 
     formatter = DataFormatter(config)
-    #assert dataset is not None, 'dataset must be specified in the load_data call'
     assert use_covs is not None, 'use_covs must be specified in the load_data call'
 
     # convert to series
