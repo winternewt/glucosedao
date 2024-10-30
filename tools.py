@@ -13,13 +13,14 @@ import hashlib
 from urllib.parse import urlparse
 from huggingface_hub import hf_hub_download
 import plotly.graph_objects as go
+import gradio as gr
 
 
 glucose = Path(os.path.abspath(__file__)).parent.resolve()
 file_directory = glucose / "files"
 
 
-def plot_forecast(forecasts: np.ndarray, scalers: Any, dataset_test_glufo: Any, filename: str):
+def plot_forecast(forecasts: np.ndarray, filename: str,ind:int=10):
     
     forecasts = (forecasts - scalers['target'].min_) / scalers['target'].scale_
 
@@ -33,7 +34,6 @@ def plot_forecast(forecasts: np.ndarray, scalers: Any, dataset_test_glufo: Any, 
     inputs = (np.array(inputs) - scalers['target'].min_) / scalers['target'].scale_
 
     # Select a specific sample to plot
-    ind = 10  # Example index
 
     samples = np.random.normal(
         loc=forecasts[ind, :],  # Mean (center) of the distribution
@@ -129,8 +129,7 @@ def generate_filename_from_url(url: str, extension: str = "png") -> str:
     return filename
 
 
-
-def predict_glucose_tool(file) -> go.Figure:
+def prep_predict_glucose_tool(file):
     """
     Function to predict future glucose of user. It receives URL with users csv. It will run an ML and will return URL with predictions that user can open on her own..
     :param file: it is the csv file imported as a string path to the temporary location gradio allows
@@ -140,16 +139,17 @@ def predict_glucose_tool(file) -> go.Figure:
     :return:
     """
 
-    url = file
+    
     model="Livia-Zaharia/gluformer_models"
     model_path = hf_hub_download(repo_id= model, filename="gluformer_1samples_10000epochs_10heads_32batch_geluactivation_livia_mini_weights.pth")
     
-                    
-    formatter, series, scalers = load_data(url=str(url), config_path=file_directory / "config.yaml", use_covs=True,
+    global formatter
+    global series
+    global scalers                
+    formatter, series, scalers = load_data(url=str(file), config_path=file_directory / "config.yaml", use_covs=True,
                                            cov_type='dual',
                                            use_static_covs=True)
 
-    filename = generate_filename_from_url(url)
 
     formatter.params['gluformer'] = {
         'in_len': 96,  # example input length, adjust as necessary
@@ -158,12 +158,13 @@ def predict_glucose_tool(file) -> go.Figure:
         'd_fcn': 1024,  # fully connected layer dimension
         'num_enc_layers': 2,  # number of encoder layers
         'num_dec_layers': 2,  # number of decoder layers
-        'length_pred': 12  # prediction length, adjust as necessary
+        'length_pred': 12  # prediction length, adjust as necessary represents 1 h
     }
 
     num_dynamic_features = series['train']['future'][-1].n_components
     num_static_features = series['train']['static'][-1].n_components
 
+    global glufo
     glufo = Gluformer(
         d_model=formatter.params['gluformer']['d_model'],
         n_heads=formatter.params['gluformer']['n_heads'],
@@ -183,6 +184,7 @@ def predict_glucose_tool(file) -> go.Figure:
     device = "cuda" if torch.cuda.is_available() else "cpu"
     glufo.load_state_dict(torch.load(str(model_path), map_location=torch.device(device), weights_only=True))
 
+    global dataset_test_glufo
     # Define dataset for inference
     dataset_test_glufo = SamplingDatasetInferenceDual(
         target_series=series['test']['target'],
@@ -193,17 +195,35 @@ def predict_glucose_tool(file) -> go.Figure:
         array_output_only=True
     )
 
-    forecasts, _ = glufo.predict(
-        dataset_test_glufo,
-        batch_size=16,#######
-        num_samples=10,
-        device=device
+    global filename
+    filename = generate_filename_from_url(file)
+
+    max_index = len(dataset_test_glufo) - 1
+    
+    return (
+        gr.Slider(
+            minimum=0,
+            maximum=max_index,
+            value=10,
+            step=1,
+            label="Select Sample Index",
+        ),
+        gr.Markdown(f"Total number of test samples: {max_index + 1}")
     )
-    figure_path, result = plot_forecast(forecasts, scalers, dataset_test_glufo,filename)
+
+
+def predict_glucose_tool(ind) -> go.Figure:
+    
+    
+    
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    
+    forecasts, _ = glufo.predict(
+      dataset_test_glufo,
+      batch_size=16,#######
+      num_samples=10,
+      device=device
+    )
+    figure_path, result = plot_forecast(forecasts,filename,ind)
     
     return result
-
-
-
-if __name__ == "__main__":
-    predict_glucose_tool()
