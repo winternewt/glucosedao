@@ -14,12 +14,12 @@ from urllib.parse import urlparse
 from huggingface_hub import hf_hub_download
 import plotly.graph_objects as go
 import gradio as gr
+from format_dexcom import *
 
 
 glucose = Path(os.path.abspath(__file__)).parent.resolve()
 file_directory = glucose / "files"
-
-
+       
 def plot_forecast(forecasts: np.ndarray, filename: str,ind:int=10):
     
     forecasts = (forecasts - scalers['target'].min_) / scalers['target'].scale_
@@ -129,27 +129,27 @@ def generate_filename_from_url(url: str, extension: str = "png") -> str:
     return filename
 
 
+glufo = None
+scalers = None
+dataset_test_glufo = None
+filename = None
+
 def prep_predict_glucose_tool(file):
     """
-    Function to predict future glucose of user. It receives URL with users csv. It will run an ML and will return URL with predictions that user can open on her own..
-    :param file: it is the csv file imported as a string path to the temporary location gradio allows
-    :param model: model that is used to predict the glucose- was hardcoded
-    :param explain if it should give both url and explanation
-    :param if the person is diabetic when doing prediction and explanation
-    :return:
+    Function to predict future glucose of user.
     """
-
+    global formatter, series, scalers, glufo, dataset_test_glufo, filename
     
-    model="Livia-Zaharia/gluformer_models"
-    model_path = hf_hub_download(repo_id= model, filename="gluformer_1samples_10000epochs_10heads_32batch_geluactivation_livia_mini_weights.pth")
+    model = "Livia-Zaharia/gluformer_models"
+    model_path = hf_hub_download(repo_id=model, filename="gluformer_1samples_10000epochs_10heads_32batch_geluactivation_livia_mini_weights.pth")
     
-    global formatter
-    global series
-    global scalers                
-    formatter, series, scalers = load_data(url=str(file), config_path=file_directory / "config.yaml", use_covs=True,
-                                           cov_type='dual',
-                                           use_static_covs=True)
-
+    formatter, series, scalers = load_data(
+        url=str(file), 
+        config_path=file_directory / "config.yaml",
+        use_covs=True,
+        cov_type='dual',
+        use_static_covs=True
+    )
 
     formatter.params['gluformer'] = {
         'in_len': 96,  # example input length, adjust as necessary
@@ -182,10 +182,9 @@ def prep_predict_glucose_tool(file):
     )
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    glufo.load_state_dict(torch.load(str(model_path), map_location=torch.device(device), weights_only=True))
+    glufo.load_state_dict(torch.load(str(model_path), map_location=torch.device(device)))
 
     global dataset_test_glufo
-    # Define dataset for inference
     dataset_test_glufo = SamplingDatasetInferenceDual(
         target_series=series['test']['target'],
         covariates=series['test']['future'],
@@ -213,8 +212,7 @@ def prep_predict_glucose_tool(file):
 
 
 def predict_glucose_tool(ind) -> go.Figure:
-    
-    
+       
     
     device = "cuda" if torch.cuda.is_available() else "cpu"
     

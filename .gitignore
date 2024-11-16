@@ -1,1 +1,10 @@
-__pycache__
+__pycache__/
+/__pycache__
+files/
+.micromamba/
+.mamba/
+.mamba-cache/
+.mamba-env/
+.mamba-env-cache/
+.DS_Store
+.vscode/

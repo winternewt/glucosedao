@@ -1,20 +1,18 @@
 import pandas as pd
 from pathlib import Path
-import typer
 
 
 def process_csv(
-        input_dir: Path = typer.Argument( help="Directory containing the input CSV files."),
-        output_file: Path = typer.Argument( help="Path to save the processed CSV file."),
-        event_type_filter: str = typer.Option('egv', help="Event type to filter by."),
-        drop_duplicates: bool = typer.Option(True, help="Whether to drop duplicate timestamps."),
-        time_diff_minutes: int = typer.Option(1, help="Minimum time difference in minutes to keep a row."),
-        chunk_size: int = typer.Option(1000, help="Chunk size for the 'id' column increment. Set to 0 or None for a single id."),
+        input_dir: Path,
+        output_file: Path,
+        event_type_filter: str = 'egv',
+        drop_duplicates: bool = True,
+        time_diff_minutes: int = 1,
+        chunk_size: int = 1000,
 ) -> pd.DataFrame:
 
     # Read CSV file into a DataFrame
-    filename=input_dir
-    df = pd.read_csv(filename, low_memory=False)
+    df = pd.read_csv(input_dir, low_memory=False)
 
 
     # Filter by Event Type and Event Subtype
@@ -39,12 +37,16 @@ def process_csv(
     }
     df = df.rename(columns=column_rename)
 
+    df['id'] = df['id'].astype(int)
+    df = df.dropna(subset=['id'])  # Drops rows where the index is NaN
+
+
     
     # Handle id assignment based on chunk_size
     if chunk_size is None or chunk_size == 0:
         df['id'] = 1  # Assign the same id to all rows
     else:
-        df['id'] = ((df.index // chunk_size) % (df.index.max() // chunk_size + 1)).astype(int)
+        df['id'] = (df.index // chunk_size).astype(int)
 
     # Convert timestamp to datetime
     df['time'] = pd.to_datetime(df['time'])
@@ -66,13 +68,12 @@ def process_csv(
     # Write the modified dataframe to a new CSV file
     df.to_csv(output_file, index=False)
 
-    typer.echo("CSV files have been successfully merged, modified, and saved.")
+    #typer.echo("CSV file has been successfully processed.")
 
     return df
 
 
-
-
+'''
 def process_multiple_csv(
         input_dir: Path = typer.Argument('./raw_data/livia_unmerged', help="Directory containing the input CSV files."),
         output_file: Path = typer.Argument('./raw_data/livia_unmerged/livia_mini.csv', help="Path to save the processed CSV file."),
@@ -147,6 +148,6 @@ def process_multiple_csv(
     combined_df.to_csv(output_file, index=False)
 
     typer.echo("CSV files have been successfully merged, modified, and saved.")
-
+'''
 if __name__ == "__main__":
     typer.run(process_csv)

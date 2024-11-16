@@ -81,6 +81,7 @@ def make_series(data: Dict[str, pd.DataFrame],
 
 def load_data(url: str,
               config_path: Path,
+              #df: pd.DataFrame,
               use_covs: bool = False,
               cov_type: str = 'past',
               use_static_covs: bool = False, seed = 0):
@@ -164,7 +165,9 @@ def load_data(url: str,
         config = yaml.safe_load(f)
     config["data_csv_path"] = url
 
-    formatter = DataFormatter(config)
+    formatter = DataFormatter(config
+                              #,df
+                              )
     assert use_covs is not None, 'use_covs must be specified in the load_data call'
 
     # convert to series

@@ -25,7 +25,9 @@ dict_input_type = {'target': InputTypes.TARGET,
 class DataFormatter:
   # Defines and formats data.
 
-  def __init__(self, cnf):
+  def __init__(self, cnf
+               #, df
+               ):
     """Initialises formatter."""
     # load parameters from the config file
     self.params = cnf
