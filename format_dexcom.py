@@ -1,6 +1,6 @@
 import pandas as pd
 from pathlib import Path
-
+import typer
 
 def process_csv(
         input_dir: Path,
