@@ -1,0 +1,23 @@
+name: glucose
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pip:
+    - torch
+    - optuna
+    - numpy==1.26.4
+    - tensorboard
+    - pandas
+    - psutil
+    - typer
+    - darts==0.29.0
+    - pmdarima==2.0.4
+    - peft
+    - transformers
+    - datasets
+    - python-multipart
+    - plotly
+    - kaleido
+    - huggingface-hub

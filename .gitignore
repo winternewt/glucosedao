@@ -8,3 +8,5 @@ files/
 .mamba-env-cache/
 .DS_Store
 .vscode/
+.gradio/
+__pycache__

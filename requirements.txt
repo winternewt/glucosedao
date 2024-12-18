@@ -14,3 +14,4 @@ datasets
 python-multipart
 plotly
 kaleido
+huggingface-hub

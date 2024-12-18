@@ -15,12 +15,16 @@ from huggingface_hub import hf_hub_download
 import plotly.graph_objects as go
 import gradio as gr
 from format_dexcom import *
+from typing import Tuple, Union, List
+from plotly.graph_objs._figure import Figure
+from gradio.components import Slider
+from gradio.components import Markdown
 
 
 glucose = Path(os.path.abspath(__file__)).parent.resolve()
 file_directory = glucose / "files"
        
-def plot_forecast(forecasts: np.ndarray, filename: str,ind:int=10):
+def plot_forecast(forecasts: np.ndarray, filename: str,ind:int=10) -> Tuple[Path, Figure]:
     
     forecasts = (forecasts - scalers['target'].min_) / scalers['target'].scale_
 
@@ -134,14 +138,14 @@ scalers = None
 dataset_test_glufo = None
 filename = None
 
-def prep_predict_glucose_tool(file):
+def prep_predict_glucose_tool(file: Union[str, Path], model_name: str = "gluformer_1samples_10000epochs_10heads_32batch_geluactivation_livia_mini_weights.pth") -> Tuple[Slider, Markdown]:
     """
     Function to predict future glucose of user.
     """
     global formatter, series, scalers, glufo, dataset_test_glufo, filename
     
     model = "Livia-Zaharia/gluformer_models"
-    model_path = hf_hub_download(repo_id=model, filename="gluformer_1samples_10000epochs_10heads_32batch_geluactivation_livia_mini_weights.pth")
+    model_path = hf_hub_download(repo_id=model, filename=model_name)
     
     formatter, series, scalers = load_data(
         url=str(file), 
@@ -198,20 +202,23 @@ def prep_predict_glucose_tool(file):
     filename = generate_filename_from_url(file)
 
     max_index = len(dataset_test_glufo) - 1
+
+    print(f"Total number of test samples: {max_index + 1}")
     
     return (
         gr.Slider(
             minimum=0,
-            maximum=max_index,
-            value=10,
+            maximum=max_index-1,
+            value=max_index,
             step=1,
             label="Select Sample Index",
+            visible=True
         ),
-        gr.Markdown(f"Total number of test samples: {max_index + 1}")
+        gr.Markdown(f"Total number of test samples: {max_index + 1}", visible=True)
     )
 
 
-def predict_glucose_tool(ind) -> go.Figure:
+def predict_glucose_tool(ind: int) -> Figure:
        
     
     device = "cuda" if torch.cuda.is_available() else "cpu"
