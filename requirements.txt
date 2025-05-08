@@ -1,4 +1,4 @@
-gradio
+gradio[mcp]>=5.29.0
 torch
 optuna
 numpy==1.26.4
@@ -15,3 +15,4 @@ python-multipart
 plotly
 kaleido
 huggingface-hub
+pydantic==2.10.6
