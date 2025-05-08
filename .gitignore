@@ -1,5 +1,4 @@
 __pycache__/
-/__pycache__
 files/
 .micromamba/
 .mamba/
@@ -9,4 +8,3 @@ files/
 .DS_Store
 .vscode/
 .gradio/
-__pycache__
