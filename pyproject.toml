@@ -23,6 +23,7 @@ dependencies = [
     "kaleido",
     "huggingface-hub",
     "pydantic",
+    "chardet>=5.2.0",
 ]
 
 [project.scripts]
