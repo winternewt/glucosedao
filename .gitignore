@@ -8,3 +8,5 @@ files/
 .DS_Store
 .vscode/
 .gradio/
+
+validation_report.txt

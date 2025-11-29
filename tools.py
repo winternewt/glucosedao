@@ -14,7 +14,6 @@ from urllib.parse import urlparse
 from huggingface_hub import hf_hub_download
 import plotly.graph_objects as go
 import gradio as gr
-from format_dexcom import *
 from typing import Tuple, Union, List
 from plotly.graph_objs._figure import Figure
 from gradio.components import Slider
@@ -208,7 +207,7 @@ def prep_predict_glucose_tool(file: Union[str, Path], model_name: str = "gluform
     return (
         gr.Slider(
             minimum=0,
-            maximum=max_index-1,
+            maximum=max_index,
             value=max_index,
             step=1,
             label="Select Sample Index",

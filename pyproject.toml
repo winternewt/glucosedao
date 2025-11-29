@@ -24,6 +24,7 @@ dependencies = [
     "huggingface-hub",
     "pydantic",
     "chardet>=5.2.0",
+    "cgm-format>=0.3.3",
 ]
 
 [project.scripts]

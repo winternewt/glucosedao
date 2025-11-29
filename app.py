@@ -1,6 +1,6 @@
 import gradio as gr
 from tools import *
-from format_dexcom import process_csv
+from input_processing import process_csv_with_options
 import tempfile
 import os
 from huggingface_hub import list_models
@@ -40,9 +40,9 @@ def process_and_prepare(file: tempfile._TemporaryFileWrapper, model_name: str) -
     with tempfile.NamedTemporaryFile(delete=False, suffix='.csv') as tmp_file:
         processed_path = tmp_file.name
     
-    process_csv(
-        input_dir=file.name,
-        output_file=processed_path
+    process_csv_with_options(
+        input_file=Path(file.name),
+        output_file=Path(processed_path)
     )
     
     return prep_predict_glucose_tool(processed_path, model_name)
