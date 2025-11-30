@@ -4,9 +4,10 @@ import pickle
 import gzip
 from pathlib import Path
 import numpy as np
+import polars as pl
 import torch
 from scipy import stats
-from gluformer.model import Gluformer
+from lib.gluformer.model import Gluformer
 from utils.darts_processing import *
 from utils.darts_dataset import *
 import hashlib
@@ -14,10 +15,12 @@ from urllib.parse import urlparse
 from huggingface_hub import hf_hub_download
 import plotly.graph_objects as go
 import gradio as gr
-from typing import Tuple, Union, List
+from typing import Tuple, List
 from plotly.graph_objs._figure import Figure
 from gradio.components import Slider
 from gradio.components import Markdown
+from cgm_format import FormatProcessor
+from fast_inference import create_inference_dataset_fast, GluformerInferenceConfig
 
 
 glucose = Path(os.path.abspath(__file__)).parent.resolve()
@@ -67,7 +70,7 @@ def plot_forecast(forecasts: np.ndarray, filename: str,ind:int=10) -> Tuple[Path
             line=dict(color='rgba(0,0,0,0)'),
             showlegend=False
         ))
-
+    
     
     true_values = np.concatenate([inputs[ind, -12:], trues[ind, :]])
     true_values_flat=true_values.flatten()
@@ -109,9 +112,9 @@ def plot_forecast(forecasts: np.ndarray, filename: str,ind:int=10) -> Tuple[Path
     # Save figure
     where = file_directory / filename
     fig.write_html(str(where.with_suffix('.html')))
-    fig.write_image(str(where))
+    fig.write_image(str(where.with_suffix('.png')))
 
-    return where, fig
+    return where.with_suffix('.png'), fig
 
 
 def generate_filename_from_url(url: str, extension: str = "png") -> str:
@@ -137,75 +140,70 @@ scalers = None
 dataset_test_glufo = None
 filename = None
 
-def prep_predict_glucose_tool(file: Union[str, Path], model_name: str = "gluformer_1samples_10000epochs_10heads_32batch_geluactivation_livia_mini_weights.pth") -> Tuple[Slider, Markdown]:
+def prep_predict_glucose_tool(unified_df: pl.DataFrame, model_name: str = "gluformer_1samples_10000epochs_10heads_32batch_geluactivation_livia_mini_weights.pth") -> Tuple[dict, dict]:
     """
     Function to predict future glucose of user.
+    
+    Args:
+        unified_df: Unified format DataFrame (with sequence_id, datetime, glucose columns)
+        model_name: Name of the model weights file
     """
-    global formatter, series, scalers, glufo, dataset_test_glufo, filename
+    global scalers, glufo, dataset_test_glufo, filename
     
     model = "Livia-Zaharia/gluformer_models"
     model_path = hf_hub_download(repo_id=model, filename=model_name)
     
-    formatter, series, scalers = load_data(
-        url=str(file), 
-        config_path=file_directory / "config.yaml",
-        use_covs=True,
-        cov_type='dual',
-        use_static_covs=True
+    # Filter to glucose-only events first (keeps sequence_id unlike to_data_only_df)
+    #glucose_only_df, _ = FormatProcessor.split_glucose_events(unified_df)
+    
+    # Drop duplicate timestamps
+    #glucose_only_df = glucose_only_df.unique(subset=['datetime'], keep='first')
+    
+    glucose_only_df = FormatProcessor.to_data_only_df(
+        unified_df,
+        drop_service_columns=False,
+        drop_duplicates=True,
+        glucose_only=True
     )
 
-    formatter.params['gluformer'] = {
-        'in_len': 96,  # example input length, adjust as necessary
-        'd_model': 512,  # model dimension
-        'n_heads': 10,  # number of attention heads########################
-        'd_fcn': 1024,  # fully connected layer dimension
-        'num_enc_layers': 2,  # number of encoder layers
-        'num_dec_layers': 2,  # number of decoder layers
-        'length_pred': 12  # prediction length, adjust as necessary represents 1 h
-    }
+    # Initialize Config
+    # Note: We hardcode model params here as they are tied to the specific weights file we download
+    config = GluformerInferenceConfig(
+        input_chunk_length=96,
+        output_chunk_length=12,
+        d_model=512,
+        n_heads=10,
+        d_fcn=1024,
+        num_enc_layers=2,
+        num_dec_layers=2,
+        gap_threshold=45, # Overriding default if needed
+        min_drop_length=12
+    )
+    
+    # Use new fast inference pipeline directly with UnifiedFormat DataFrame
+    dataset_test_glufo, target_scaler, model_config = create_inference_dataset_fast(
+        data=glucose_only_df,
+        config=config
+    )
+    
+    # Update global scalers
+    #plot_forecast only works with the target scaler
+    scalers = {'target': target_scaler}
+    filename = "uploaded_data"
 
-    num_dynamic_features = series['train']['future'][-1].n_components
-    num_static_features = series['train']['static'][-1].n_components
-
+    # Load Model
     global glufo
-    glufo = Gluformer(
-        d_model=formatter.params['gluformer']['d_model'],
-        n_heads=formatter.params['gluformer']['n_heads'],
-        d_fcn=formatter.params['gluformer']['d_fcn'],
-        r_drop=0.2,
-        activ='gelu',
-        num_enc_layers=formatter.params['gluformer']['num_enc_layers'],
-        num_dec_layers=formatter.params['gluformer']['num_dec_layers'],
-        distil=True,
-        len_seq=formatter.params['gluformer']['in_len'],
-        label_len=formatter.params['gluformer']['in_len'] // 3,
-        len_pred=formatter.params['length_pred'],
-        num_dynamic_features=num_dynamic_features,
-        num_static_features=num_static_features
-    )
+    glufo = Gluformer(**model_config.model_dump())
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     glufo.load_state_dict(torch.load(str(model_path), map_location=torch.device(device)))
-
-    global dataset_test_glufo
-    dataset_test_glufo = SamplingDatasetInferenceDual(
-        target_series=series['test']['target'],
-        covariates=series['test']['future'],
-        input_chunk_length=formatter.params['gluformer']['in_len'],
-        output_chunk_length=formatter.params['length_pred'],
-        use_static_covariates=True,
-        array_output_only=True
-    )
-
-    global filename
-    filename = generate_filename_from_url(file)
 
     max_index = len(dataset_test_glufo) - 1
 
     print(f"Total number of test samples: {max_index + 1}")
     
     return (
-        gr.Slider(
+        gr.update(
             minimum=0,
             maximum=max_index,
             value=max_index,
@@ -213,7 +211,7 @@ def prep_predict_glucose_tool(file: Union[str, Path], model_name: str = "gluform
             label="Select Sample Index",
             visible=True
         ),
-        gr.Markdown(f"Total number of test samples: {max_index + 1}", visible=True)
+        gr.update(value=f"Total number of test samples: {max_index + 1}", visible=True)
     )
 
 

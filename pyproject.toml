@@ -1,30 +1,20 @@
 [project]
 name = "glucosedao"
-version = "0.1.0"
+version = "0.2.1"
 description = "space for the GlucoseDao project"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.11"
 dependencies = [
     "kaleido==0.2.1",
-    "gradio[mcp]>=5.29.0",
-    "torch",
-    "optuna",
-    "numpy==1.26.4",
-    "tensorboard",
-    "pandas",
+    "gradio[mcp]<6.0",
     "psutil",
-    "typer",
     "darts==0.29.0",
-    "peft",
-    "transformers",
-    "datasets",
     "python-multipart",
     "plotly",
-    "kaleido",
     "huggingface-hub",
     "pydantic",
-    "chardet>=5.2.0",
-    "cgm-format>=0.3.3",
+    "cgm-format>=0.4.2",
+    "glucosedao-glucobench>=0.2.0",
 ]
 
 [project.scripts]
@@ -36,3 +26,12 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["glucosedao"]
+
+[tool.hatch.build.targets.sdist]
+exclude = [
+    "data/",
+    "data/**/*.csv",
+    ".pytest_cache/",
+    ".venv/",
+    "*.egg-info/",
+]
