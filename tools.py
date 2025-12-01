@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 from huggingface_hub import hf_hub_download
 import plotly.graph_objects as go
 import gradio as gr
-from typing import Tuple, List
+from typing import Tuple, List, Optional
 from plotly.graph_objs._figure import Figure
 from gradio.components import Slider
 from gradio.components import Markdown
@@ -88,9 +88,13 @@ def plot_forecast(forecasts: np.ndarray, filename: str,ind:int=10) -> Tuple[Path
     forecast = samples[:, :]
     median = np.quantile(forecast, 0.5, axis=-1)
 
+    last_true_value = true_values_flat[11]
+    median_with_anchor = [last_true_value] + median.tolist()
+    median_x = [-1] + list(range(12))
+
     fig.add_trace(go.Scatter(
-        x=list(range(12)),
-        y=median.tolist(),  # Convert to list explicitly
+        x=median_x,
+        y=median_with_anchor,  # Include anchor to connect with history
         mode='lines+markers',
         line=dict(color='red', width=2),
         marker=dict(size=8),
@@ -139,6 +143,7 @@ glufo = None
 scalers = None
 dataset_test_glufo = None
 filename = None
+cached_forecasts: Optional[np.ndarray] = None
 
 def prep_predict_glucose_tool(unified_df: pl.DataFrame, model_name: str = "gluformer_1samples_10000epochs_10heads_32batch_geluactivation_livia_mini_weights.pth") -> Tuple[dict, dict]:
     """
@@ -148,7 +153,7 @@ def prep_predict_glucose_tool(unified_df: pl.DataFrame, model_name: str = "glufo
         unified_df: Unified format DataFrame (with sequence_id, datetime, glucose columns)
         model_name: Name of the model weights file
     """
-    global scalers, glufo, dataset_test_glufo, filename
+    global scalers, glufo, dataset_test_glufo, filename, cached_forecasts
     
     model = "Livia-Zaharia/gluformer_models"
     model_path = hf_hub_download(repo_id=model, filename=model_name)
@@ -190,6 +195,7 @@ def prep_predict_glucose_tool(unified_df: pl.DataFrame, model_name: str = "glufo
     #plot_forecast only works with the target scaler
     scalers = {'target': target_scaler}
     filename = "uploaded_data"
+    cached_forecasts = None  # Reset cache whenever a new dataset is prepared
 
     # Load Model
     global glufo
@@ -216,16 +222,27 @@ def prep_predict_glucose_tool(unified_df: pl.DataFrame, model_name: str = "glufo
 
 
 def predict_glucose_tool(ind: int) -> Figure:
-       
-    
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    
-    forecasts, _ = glufo.predict(
-      dataset_test_glufo,
-      batch_size=16,#######
-      num_samples=10,
-      device=device
+    global cached_forecasts
+
+    if glufo is None or dataset_test_glufo is None or filename is None:
+        raise RuntimeError("Prediction requested before model preparation.")
+
+    cache_invalid = (
+        cached_forecasts is None or
+        cached_forecasts.shape[0] != len(dataset_test_glufo)
     )
-    figure_path, result = plot_forecast(forecasts,filename,ind)
-    
+
+    if cache_invalid:
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+ 
+        forecasts, _ = glufo.predict(
+            dataset_test_glufo,
+            batch_size=16,
+            num_samples=24,
+            device=device
+        )
+        cached_forecasts = forecasts
+
+    _, result = plot_forecast(cached_forecasts, filename, ind)
+
     return result
